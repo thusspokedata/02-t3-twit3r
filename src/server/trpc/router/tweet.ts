@@ -31,6 +31,9 @@ export const tweetRouter = router({
     .query(async ({ ctx, input }) => {
       const { prisma } = ctx;
       const { cursor, limit } = input;
+      //#endregion
+
+      const userId = ctx.session?.user?.id;
 
       const tweets = await prisma.tweet.findMany({
         take: limit + 1,
@@ -39,8 +42,16 @@ export const tweetRouter = router({
             createdAt: "desc",
           },
         ],
-        cursor: cursor ? {id: cursor}: undefined,
+        cursor: cursor ? { id: cursor } : undefined,
         include: {
+          likes: {
+            where: {
+              userId,
+            },
+            select: {
+                userId: true,
+            }
+          },
           author: {
             select: {
               name: true,
@@ -53,8 +64,8 @@ export const tweetRouter = router({
 
       let nextCursor: typeof cursor | undefined = undefined;
 
-      if(tweets.length > limit) {
-        const nextItem = tweets.pop() as typeof tweets[number]
+      if (tweets.length > limit) {
+        const nextItem = tweets.pop() as typeof tweets[number];
 
         nextCursor = nextItem.id;
       }
@@ -63,5 +74,51 @@ export const tweetRouter = router({
         tweets,
         nextCursor,
       };
+    }),
+
+  like: protectedProcedure
+    .input(
+      z.object({
+        tweetId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const { prisma } = ctx;
+      return prisma.like.create({
+        data: {
+          tweet: {
+            connect: {
+              id: input.tweetId,
+            },
+          },
+          user: {
+            connect: {
+              id: userId,
+            },
+          },
+        },
+      });
+    }),
+
+  unlike: protectedProcedure
+    .input(
+      z.object({
+        tweetId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const { prisma } = ctx;
+      return prisma.like.delete({
+        where: {
+          tweetId_userId: {
+            tweetId: input.tweetId,
+            userId,
+          },
+        },
+      });
     }),
 });
